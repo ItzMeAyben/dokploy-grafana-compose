@@ -109,7 +109,7 @@ Optional: `PROMETHEUS_RETENTION` (default `15d`).
 
 ## Dashboards
 
-Provisioned from `monitoring/grafana/dashboards/` into the **ThorneAI** folder (editable in the UI; redeploy resets them to the repo version):
+Provisioned from `monitoring/grafana/dashboards/` into the folder (editable in the UI; redeploy resets them to the repo version):
 
 | Dashboard | Source |
 | --- | --- |
@@ -121,7 +121,7 @@ Provisioned from `monitoring/grafana/dashboards/` into the **ThorneAI** folder (
 | AI Interview voice | `ai_interview.*` |
 | Realtime & workers | `ws.*`, `worker.broadcast_*`, `notification.*`, `chat.cleanup.*`, Celery |
 
-OTLP metrics land in Prometheus as `job="thorneai/<service.name>"`, dots become underscores, units become suffixes (`ms` → `_milliseconds`, `USD` → `_USD`) and counters get `_total`. `user_id` is dropped from metrics to keep cardinality bounded.
+OTLP metrics land in Prometheus as `job="<service.name>"`, dots become underscores, units become suffixes (`ms` → `_milliseconds`, `USD` → `_USD`) and counters get `_total`. `user_id` is dropped from metrics to keep cardinality bounded.
 
 ## Agent (app servers)
 
