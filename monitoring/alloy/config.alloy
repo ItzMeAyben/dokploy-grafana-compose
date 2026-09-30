@@ -1,20 +1,70 @@
-// Metrics: Prometheus remote_write  ->  Mimir
+// Every series/stream gets environment=$ENVIRONMENT unless the sender already set one.
+// Staging apps pushing here should set environment="staging" (OTLP: deployment.environment=staging).
+
+// Metrics: Prometheus remote_write  ->  Prometheus
 prometheus.receive_http "metrics_ingest" {
   http {
     listen_address = "0.0.0.0"
     listen_port    = 9090
   }
-  forward_to = [prometheus.remote_write.mimir.receiver]
+  forward_to = [prometheus.remote_write.default.receiver]
 }
 
-// Host metrics: scrape node_exporter  ->  Mimir
+// Host metrics: scrape node_exporter  ->  Prometheus
 prometheus.scrape "node_exporter" {
   targets = [
     { __address__ = "node-exporter:9100", instance = "host" },
   ]
-  forward_to      = [prometheus.remote_write.mimir.receiver]
+  forward_to      = [prometheus.remote_write.default.receiver]
   scrape_interval = "30s"
   job_name        = "node-exporter"
+}
+
+// Container metrics: scrape cAdvisor  ->  Prometheus
+prometheus.scrape "cadvisor" {
+  targets = [
+    { __address__ = "cadvisor:8080", instance = "host" },
+  ]
+  forward_to      = [prometheus.remote_write.default.receiver]
+  scrape_interval = "30s"
+  job_name        = "cadvisor"
+}
+
+// Docker container logs  ->  Loki
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+  // ponytail: name-based guess for staging containers on this host; switch to a docker label if names stop matching
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = ".*staging.*"
+    target_label  = "environment"
+    replacement   = "staging"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.write.default.receiver]
 }
 
 // Logs: Loki push API  ->  Loki
@@ -36,8 +86,32 @@ otelcol.receiver.otlp "ingest" {
   }
   output {
     traces  = [otelcol.exporter.otlp.tempo.input]
-    metrics = [otelcol.exporter.prometheus.to_mimir.input]
-    logs    = [otelcol.exporter.loki.to_loki.input]
+    metrics = [otelcol.processor.transform.environment.input]
+    logs    = [otelcol.processor.transform.environment.input]
+  }
+}
+
+// OTLP resource deployment.environment -> `environment` label on metrics and logs
+otelcol.processor.transform "environment" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context    = "datapoint"
+    statements = [
+      `set(attributes["environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil`,
+    ]
+  }
+  log_statements {
+    context    = "log"
+    statements = [
+      `set(attributes["environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil`,
+      `set(attributes["loki.attribute.labels"], "environment") where attributes["environment"] != nil`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.exporter.prometheus.default.input]
+    logs    = [otelcol.exporter.loki.default.input]
   }
 }
 
@@ -45,19 +119,21 @@ otelcol.receiver.otlp "ingest" {
 // Exporters (internal fan-out to backends)
 // =============================================================================
 
-prometheus.remote_write "mimir" {
+prometheus.remote_write "default" {
   endpoint {
-    url = "http://mimir:9009/api/v1/push"
+    url = "http://prometheus:9090/api/v1/write"
   }
   external_labels = {
-    cluster   = "production",
-    namespace = "monitoring",
+    environment = sys.env("ENVIRONMENT"),
   }
 }
 
 loki.write "default" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
+  }
+  external_labels = {
+    environment = sys.env("ENVIRONMENT"),
   }
 }
 
@@ -70,12 +146,10 @@ otelcol.exporter.otlp "tempo" {
   }
 }
 
-// OTLP metrics -> Prometheus remote_write -> Mimir
-otelcol.exporter.prometheus "to_mimir" {
-  forward_to = [prometheus.remote_write.mimir.receiver]
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.default.receiver]
 }
 
-// OTLP logs -> Loki
-otelcol.exporter.loki "to_loki" {
+otelcol.exporter.loki "default" {
   forward_to = [loki.write.default.receiver]
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Send a sample OTLP metric to Alloy (forwarded to Mimir) for testing
+# Send a sample OTLP metric to Alloy (forwarded to Prometheus) for testing
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,5 +42,5 @@ curl -s -u "${ALLOY_USER}:${ALLOY_PASSWORD}" -X POST "${ALLOY_ENDPOINT}/v1/metri
 }"
 
 echo ""
-echo "Metric sent. Query in Grafana (Mimir datasource): test_temperature"
+echo "Metric sent. Query in Grafana (Prometheus datasource): test_temperature"
 echo "Value: ${VALUE}"

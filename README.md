@@ -5,7 +5,7 @@
 ![Docker](https://img.shields.io/badge/Docker%20Compose-Ready-2496ED?style=flat-square&logo=docker)
 ![Is It Alive?](https://isitalive.dev/api/badge/github/quochuydev/dokploy-grafana-compose)
 
-Grafana + Loki + Tempo + Mimir + Alloy as a single Dokploy Compose service.
+Grafana + Prometheus + Loki + Tempo + Alloy (+ node-exporter, cAdvisor) as a single Dokploy Compose service. One deployment monitors both production and staging, split by an `environment` label.
 
 ## Architecture
 
@@ -14,6 +14,8 @@ flowchart LR
     user([User])
     apps[Apps / Clients]
     node[node-exporter]
+    cadvisor[cAdvisor]
+    docker[Docker logs]
 
     subgraph Ingest
         alloy[Alloy]
@@ -22,19 +24,21 @@ flowchart LR
     subgraph Storage
         loki[(Loki)]
         tempo[(Tempo)]
-        mimir[(Mimir)]
+        prometheus[(Prometheus)]
     end
 
     grafana[Grafana]
 
     apps --> alloy
     node --> alloy
+    cadvisor --> alloy
+    docker --> alloy
     alloy --> loki
     alloy --> tempo
-    alloy --> mimir
+    alloy --> prometheus
     loki --> grafana
     tempo --> grafana
-    mimir --> grafana
+    prometheus --> grafana
     grafana --> user
 ```
 
@@ -59,7 +63,7 @@ flowchart LR
 
    <img src="docs/app-domains.png" width="80%" alt="Dokploy domains configuration" />
 
-   Default Grafana login: `admin` / `password`
+   Grafana login comes from `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` (see `.env.example`, paste into the **Environment** tab).
 
 3. **Protect Alloy with basic auth** (Traefik middleware)
 
@@ -87,6 +91,21 @@ flowchart LR
    ```
    alloy-auth@file
    ```
+
+## Environments (production + staging)
+
+Everything is labelled `environment`. Anything collected or received by Alloy gets `ENVIRONMENT` (default `production`, set it in Dokploy's **Environment** tab) unless the sender already set its own:
+
+| Source | How to mark staging |
+| --- | --- |
+| OTLP (traces/metrics/logs) | resource attribute `deployment.environment=staging` |
+| Prometheus remote_write | label `environment="staging"` |
+| Loki push | stream label `environment="staging"` |
+| Docker logs on this host | container name contains `staging` |
+
+Query with `{environment="staging"}` in both PromQL and LogQL.
+
+Optional: `PROMETHEUS_RETENTION` (default `15d`).
 
 ## Commands
 

@@ -132,7 +132,7 @@ async function main() {
 
   console.log(`Sent trace, metric, log to ${alloyEndpoint}`);
   console.log(`  Tempo:  { .service.name = "${serviceName}" }`);
-  console.log(`  Mimir:  test_temperature{source="${serviceName}"}`);
+  console.log(`  Prom:   test_temperature{source="${serviceName}"}`);
   console.log(`  Loki:   {service_name="${serviceName}"}`);
 }
 

@@ -24,15 +24,15 @@ datasources:
         datasourceUid: loki
         filterByTraceID: true
       tracesToMetrics:
-        datasourceUid: mimir
+        datasourceUid: prometheus
       serviceMap:
-        datasourceUid: mimir
+        datasourceUid: prometheus
 
-  - name: Mimir
+  - name: Prometheus
     type: prometheus
-    uid: mimir
+    uid: prometheus
     access: proxy
-    url: http://mimir:9009/prometheus
+    url: http://prometheus:9090
     isDefault: true
     jsonData:
-      prometheusType: Mimir
+      prometheusType: Prometheus
