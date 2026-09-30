@@ -1,0 +1,91 @@
+// Agent: ships this server's host metrics, container metrics and container logs to the hub Alloy.
+// Every series/stream is labelled environment=$ENVIRONMENT and instance/host=$HOST_NAME.
+
+prometheus.scrape "node_exporter" {
+  targets = [
+    { __address__ = "node-exporter:9100", instance = sys.env("HOST_NAME") },
+  ]
+  forward_to      = [prometheus.remote_write.hub.receiver]
+  scrape_interval = "30s"
+  job_name        = "node-exporter"
+}
+
+prometheus.scrape "cadvisor" {
+  targets = [
+    { __address__ = "cadvisor:8080", instance = sys.env("HOST_NAME") },
+  ]
+  forward_to      = [prometheus.remote_write.hub.receiver]
+  scrape_interval = "30s"
+  job_name        = "cadvisor"
+}
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+  // ponytail: name-based guess for staging containers sharing a prod host; switch to a docker label if names stop matching
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = ".*staging.*"
+    target_label  = "environment"
+    replacement   = "staging"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.drop_old.receiver]
+}
+
+// Loki rejects lines older than 7d; drop them instead of erroring on first backfill
+loki.process "drop_old" {
+  stage.drop {
+    older_than = "168h"
+  }
+  forward_to = [loki.write.hub.receiver]
+}
+
+prometheus.remote_write "hub" {
+  endpoint {
+    url = sys.env("ALLOY_URL") + "/api/v1/metrics/write"
+    basic_auth {
+      username = sys.env("ALLOY_USER")
+      password = sys.env("ALLOY_PASSWORD")
+    }
+  }
+  external_labels = {
+    environment = sys.env("ENVIRONMENT"),
+  }
+}
+
+loki.write "hub" {
+  endpoint {
+    url = sys.env("ALLOY_URL") + "/loki/api/v1/push"
+    basic_auth {
+      username = sys.env("ALLOY_USER")
+      password = sys.env("ALLOY_PASSWORD")
+    }
+  }
+  external_labels = {
+    environment = sys.env("ENVIRONMENT"),
+    host        = sys.env("HOST_NAME"),
+  }
+}

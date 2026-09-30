@@ -1,0 +1,70 @@
+# Deploy on each app server (prod, staging) as its own Dokploy Compose service. No domains needed.
+services:
+  alloy:
+    build:
+      context: ./alloy
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:?set ENVIRONMENT (production|staging)}
+      - HOST_NAME=${HOST_NAME:?set HOST_NAME}
+      - ALLOY_URL=${ALLOY_URL:-https://alloy.mythorneai.com}
+      - ALLOY_USER=${ALLOY_USER:?set ALLOY_USER}
+      - ALLOY_PASSWORD=${ALLOY_PASSWORD:?set ALLOY_PASSWORD}
+    volumes:
+      - alloy-data:/var/lib/alloy/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - node-exporter
+      - cadvisor
+    restart: on-failure:3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    restart: on-failure:3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.service,com.docker.compose.project
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    restart: on-failure:3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  alloy-data:

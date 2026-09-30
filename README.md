@@ -107,6 +107,15 @@ Query with `{environment="staging"}` in both PromQL and LogQL.
 
 Optional: `PROMETHEUS_RETENTION` (default `15d`).
 
+## Agent (app servers)
+
+`agent/` ships an app server's container logs, host metrics (node-exporter) and container metrics (cAdvisor) to this hub. Deploy it once per server as its own Dokploy **Compose** service — no domains needed:
+
+- Compose path: `./agent/docker-compose.yml`
+- Environment: see `agent/.env.example` (`ENVIRONMENT`, `HOST_NAME`, `ALLOY_USER`, `ALLOY_PASSWORD`)
+
+Requires the Alloy domains to be protected with basic auth (step 3); the agent uses the same credentials.
+
 ## Commands
 
 ```bash
