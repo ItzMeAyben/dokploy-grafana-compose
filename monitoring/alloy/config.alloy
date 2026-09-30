@@ -13,7 +13,7 @@ prometheus.receive_http "metrics_ingest" {
 // Host metrics: scrape node_exporter  ->  Prometheus
 prometheus.scrape "node_exporter" {
   targets = [
-    { __address__ = "node-exporter:9100", instance = "host" },
+    { __address__ = "node-exporter:9100", instance = sys.env("HOST_NAME") },
   ]
   forward_to      = [prometheus.remote_write.default.receiver]
   scrape_interval = "30s"
@@ -23,7 +23,7 @@ prometheus.scrape "node_exporter" {
 // Container metrics: scrape cAdvisor  ->  Prometheus
 prometheus.scrape "cadvisor" {
   targets = [
-    { __address__ = "cadvisor:8080", instance = "host" },
+    { __address__ = "cadvisor:8080", instance = sys.env("HOST_NAME") },
   ]
   forward_to      = [prometheus.remote_write.default.receiver]
   scrape_interval = "30s"
@@ -107,12 +107,16 @@ otelcol.processor.transform "environment" {
     context    = "datapoint"
     statements = [
       `set(attributes["environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil`,
+      `set(attributes["environment"], resource.attributes["deployment.environment.name"]) where resource.attributes["deployment.environment.name"] != nil`,
+      // one series per user would blow up Prometheus; per-user cost stays on the traces
+      `delete_key(attributes, "user_id")`,
     ]
   }
   log_statements {
     context    = "log"
     statements = [
       `set(attributes["environment"], resource.attributes["deployment.environment"]) where resource.attributes["deployment.environment"] != nil`,
+      `set(attributes["environment"], resource.attributes["deployment.environment.name"]) where resource.attributes["deployment.environment.name"] != nil`,
       `set(attributes["loki.attribute.labels"], "environment") where attributes["environment"] != nil`,
     ]
   }
@@ -142,6 +146,7 @@ loki.write "default" {
   }
   external_labels = {
     environment = sys.env("ENVIRONMENT"),
+    host        = sys.env("HOST_NAME"),
   }
 }
 

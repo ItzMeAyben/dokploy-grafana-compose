@@ -118,6 +118,7 @@ services:
       - /etc/alloy/config.alloy
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-production}
+      - HOST_NAME=${HOST_NAME:-observability-hub}
     volumes:
       - alloy-data:/var/lib/alloy/data
       - /var/run/docker.sock:/var/run/docker.sock:ro

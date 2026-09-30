@@ -107,6 +107,22 @@ Query with `{environment="staging"}` in both PromQL and LogQL.
 
 Optional: `PROMETHEUS_RETENTION` (default `15d`).
 
+## Dashboards
+
+Provisioned from `monitoring/grafana/dashboards/` into the **ThorneAI** folder (editable in the UI; redeploy resets them to the repo version):
+
+| Dashboard | Source |
+| --- | --- |
+| Servers | node-exporter (hub + agents) |
+| Containers | cAdvisor (hub + agents) |
+| Logs | Loki, all containers + OTLP logs |
+| App overview | HTTP / DB / Node runtime auto-instrumentation, `business.event.count` |
+| LLM & AI costs | `llm.*`, `voice.*`, `workflow.error.count`, `day_in_life.*` |
+| AI Interview voice | `ai_interview.*` |
+| Realtime & workers | `ws.*`, `worker.broadcast_*`, `notification.*`, `chat.cleanup.*`, Celery |
+
+OTLP metrics land in Prometheus as `job="thorneai/<service.name>"`, dots become underscores, units become suffixes (`ms` → `_milliseconds`, `USD` → `_USD`) and counters get `_total`. `user_id` is dropped from metrics to keep cardinality bounded.
+
 ## Agent (app servers)
 
 `agent/` ships an app server's container logs, host metrics (node-exporter) and container metrics (cAdvisor) to this hub. Deploy it once per server as its own Dokploy **Compose** service — no domains needed:
